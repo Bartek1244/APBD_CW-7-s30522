@@ -1,0 +1,12 @@
+﻿namespace apbd_cw7_s30522.Models.DTOs;
+
+public class TripCountriesGetDTO
+{
+    public int IdTrip { get; set; }
+    public string Name { get; set; }
+    public string Description { get; set; }
+    public DateTime DateFrom { get; set; }
+    public DateTime DateTo { get; set; }
+    public int MaxPeople { get; set; }
+    public List<CountryGetDTO> Countries { get; set; }
+}
