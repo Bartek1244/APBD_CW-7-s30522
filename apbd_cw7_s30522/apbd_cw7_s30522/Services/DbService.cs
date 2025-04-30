@@ -1,4 +1,5 @@
-﻿using apbd_cw7_s30522.Models.DTOs;
+﻿using apbd_cw7_s30522.Exceptions;
+using apbd_cw7_s30522.Models.DTOs;
 using Microsoft.Data.SqlClient;
 
 namespace apbd_cw7_s30522.Services;
@@ -6,16 +7,17 @@ namespace apbd_cw7_s30522.Services;
 public interface IDbService
 {
     public Task<IEnumerable<TripCountriesGetDTO>> GetAllTripsWithCountriesAsync();
+    public Task<IEnumerable<ClientTripGetDTO>> GetClientTripsAsync(int id);
 }
 
 public class DbService(IConfiguration config) : IDbService
 {
     private readonly string _connectionString = config.GetConnectionString("Default");
 
-     public async Task<IEnumerable<TripCountriesGetDTO>> GetAllTripsWithCountriesAsync()
+    public async Task<IEnumerable<TripCountriesGetDTO>> GetAllTripsWithCountriesAsync()
     {
-        var tripsWithCountries = new List<TripCountriesGetDTO>();
-        var countries = new List<CountryGetDTO>();
+        var tripsWithCountriesDict = new Dictionary<int, TripCountriesGetDTO>();
+        var countriesDict = new Dictionary<int, CountryGetDTO>();
         
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -26,11 +28,13 @@ public class DbService(IConfiguration config) : IDbService
         {
             while (await readerCountries.ReadAsync())
             {
-                countries.Add(new CountryGetDTO
+                var country = new CountryGetDTO
                 {
                     IdCountry = readerCountries.GetInt32(0),
                     Name = readerCountries.GetString(1)
-                });
+                };
+                
+                countriesDict.Add(country.IdCountry, country);
             }
         }
         
@@ -40,7 +44,7 @@ public class DbService(IConfiguration config) : IDbService
         {
             while (await readerTrips.ReadAsync())
             {
-                tripsWithCountries.Add(new TripCountriesGetDTO
+                var tripWithCountries = new TripCountriesGetDTO
                 {
                     IdTrip = readerTrips.GetInt32(0),
                     Name = readerTrips.GetString(1),
@@ -49,7 +53,9 @@ public class DbService(IConfiguration config) : IDbService
                     DateTo = readerTrips.GetDateTime(4),
                     MaxPeople = readerTrips.GetInt32(5),
                     Countries = new List<CountryGetDTO>()
-                });
+                };
+                
+                tripsWithCountriesDict.Add(tripWithCountries.IdTrip, tripWithCountries);
             }
         }
         
@@ -63,12 +69,81 @@ public class DbService(IConfiguration config) : IDbService
                 int idCountry = readerCountriesTrips.GetInt32(0);
                 int idTrip = readerCountriesTrips.GetInt32(1);
 
-                tripsWithCountries.Find(t => t.IdTrip == idTrip)
-                    .Countries.Add(countries.Find(c => c.IdCountry == idCountry));
+                tripsWithCountriesDict[idTrip].Countries.Add(countriesDict[idCountry]);
             }
         }
         
-        return tripsWithCountries;
+        return tripsWithCountriesDict.Values;
     }
-     
+
+    public async Task<IEnumerable<ClientTripGetDTO>> GetClientTripsAsync(int id)
+    {
+        var clientTripsDict = new Dictionary<int, List<ClientTripGetDTO>>();
+        
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        string queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
+        await using var commandClient = new SqlCommand(queryClient, connection);
+        commandClient.Parameters.AddWithValue("@idClient", id);
+        await using (var readerClient = await commandClient.ExecuteReaderAsync())
+        {
+            if (!await readerClient.ReadAsync())
+            {
+                throw new NotFoundException($"Client of id {id} does not exist.");
+            }
+        }
+
+        string queryClientTrips = "SELECT IdTrip, RegisteredAt, PaymentDate FROM Client_Trip WHERE IdClient = @idClient";
+        await using var commandClientTrips = new SqlCommand(queryClientTrips, connection);
+        commandClientTrips.Parameters.AddWithValue("@idClient", id);
+        await using (var readerClientTrips = await commandClientTrips.ExecuteReaderAsync())
+        {
+            while (await readerClientTrips.ReadAsync())
+            {
+                var clientTrip = new ClientTripGetDTO
+                {
+                    IdTrip = readerClientTrips.GetInt32(0),
+                    RegisteredAt = readerClientTrips.GetInt32(1),
+                    PaymentDate = readerClientTrips.IsDBNull(readerClientTrips.GetOrdinal("PaymentDate")) ? null : readerClientTrips.GetInt32(2)
+                };
+
+                if (!clientTripsDict.ContainsKey(clientTrip.IdTrip))
+                {
+                    clientTripsDict.Add(clientTrip.IdTrip, new List<ClientTripGetDTO>());
+                }
+
+                clientTripsDict[clientTrip.IdTrip].Add(clientTrip);
+            }
+        }
+
+        if (clientTripsDict.Count == 0)
+        {
+            throw new NotFoundException($"Client of id {id} has no trips registered");
+        }
+
+        foreach (var idTrip in clientTripsDict.Keys)
+        {
+            string queryTrip = "SELECT Name, Description, DateFrom, DateTo, MaxPeople FROM Trip WHERE IdTrip = @idTrip";
+            await using var commandTrip = new SqlCommand(queryTrip, connection);
+            commandTrip.Parameters.AddWithValue("@idTrip", idTrip);
+            await using (var readerTrip = await commandTrip.ExecuteReaderAsync())
+            {
+                while (await readerTrip.ReadAsync())
+                {
+                    foreach (var clientTrip in clientTripsDict[idTrip])
+                    {
+                        clientTrip.Name = readerTrip.GetString(0);
+                        clientTrip.Description = readerTrip.GetString(1);
+                        clientTrip.DateFrom = readerTrip.GetDateTime(2);
+                        clientTrip.DateTo = readerTrip.GetDateTime(3);
+                        clientTrip.MaxPeople = readerTrip.GetInt32(4);
+                    }
+                }
+            }
+        }
+        
+        return clientTripsDict.Values.SelectMany(i => i);
+    }
+    
 }
