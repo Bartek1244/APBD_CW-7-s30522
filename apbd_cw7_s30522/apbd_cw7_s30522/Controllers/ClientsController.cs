@@ -26,8 +26,8 @@ public class ClientsController(IDbService dbService) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateClientAsync([FromBody] ClientCreateDTO body)
     {
-        var id = await dbService.CreateClientAsync(body);
-        return Created($"/api/clients/{id}", id);
+        var client = await dbService.CreateClientAsync(body);
+        return Created($"/api/clients/{client.IdClient}", client.IdClient);
     }
 
 

@@ -1,4 +1,5 @@
 ﻿using apbd_cw7_s30522.Exceptions;
+using apbd_cw7_s30522.Models;
 using apbd_cw7_s30522.Models.DTOs;
 using Microsoft.Data.SqlClient;
 
@@ -8,7 +9,7 @@ public interface IDbService
 {
     public Task<IEnumerable<TripCountriesGetDTO>> GetAllTripsWithCountriesAsync();
     public Task<IEnumerable<ClientTripGetDTO>> GetClientTripsAsync(int id);
-    public Task<int> CreateClientAsync(ClientCreateDTO client);
+    public Task<Client> CreateClientAsync(ClientCreateDTO client);
 }
 
 public class DbService(IConfiguration config) : IDbService
@@ -147,10 +148,10 @@ public class DbService(IConfiguration config) : IDbService
         return clientTripsDict.Values.SelectMany(i => i);
     }
 
-    public async Task<int> CreateClientAsync(ClientCreateDTO client)
+    public async Task<Client> CreateClientAsync(ClientCreateDTO client)
     {
         await using var connection = new SqlConnection(_connectionString);
-
+        
         string insert = "INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel) " +
                         "VALUES (@firstName, @lastName, @email, @telephone, @pesel) " +
                         "; Select scope_identity()";
@@ -160,11 +161,19 @@ public class DbService(IConfiguration config) : IDbService
         command.Parameters.AddWithValue("@email", client.Email);
         command.Parameters.AddWithValue("@telephone", client.Telephone);
         command.Parameters.AddWithValue("pesel", client.Pesel);
-
+        
         await connection.OpenAsync();
-
         var id = Convert.ToInt32(await command.ExecuteScalarAsync());
-        return id;
+        
+        return new Client
+        {
+            IdClient = id,
+            Email = client.Email,
+            FirstName = client.FirstName,
+            LastName = client.LastName,
+            Telephone = client.Telephone,
+            Pesel = client.Pesel
+        };
     }
     
 }
