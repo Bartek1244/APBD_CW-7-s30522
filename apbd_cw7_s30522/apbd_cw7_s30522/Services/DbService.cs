@@ -12,6 +12,7 @@ public interface IDbService
     public Task<IEnumerable<ClientTripDetailsGetDTO>> GetClientTripsAsync(int id);
     public Task<Client> CreateClientAsync(ClientCreateDTO client);
     public Task<ClientTripRegistrationDTO> RegisterClientToTripAsync(int idClient, int idTrip);
+    public Task<bool> DeleteClientTripRegistrationAsync(int idClient, int idTrip);
 }
 
 public class DbService(IConfiguration config) : IDbService
@@ -248,6 +249,33 @@ public class DbService(IConfiguration config) : IDbService
         await commandRegistration.ExecuteScalarAsync();
         
         return clientTripRegistration;
+    }
+
+    public async Task<bool> DeleteClientTripRegistrationAsync(int idClient, int idTrip)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var queryExists = "SELECT * FROM Client_Trip WHERE IdClient = @idClient AND IdTrip = @idTrip";
+        await using var commandExists = new SqlCommand(queryExists, connection);
+        commandExists.Parameters.AddWithValue("@idClient", idClient);
+        commandExists.Parameters.AddWithValue("@idTrip", idTrip);
+        await using (var readerExists = await commandExists.ExecuteReaderAsync())
+        {
+            if (!await readerExists.ReadAsync())
+            {
+                throw new NotFoundException(
+                    $"Client of id {idClient} does not have reservation on trip of id {idTrip}");
+            }
+        }
+
+        var delete = "DELETE FROM Client_Trip WHERE IdClient = @idClient AND IdTrip = @idTrip";
+        await using var commandDelete = new SqlCommand(delete, connection);
+        commandDelete.Parameters.AddWithValue("@idClient", idClient);
+        commandDelete.Parameters.AddWithValue("@idTrip", idTrip);
+        await commandDelete.ExecuteScalarAsync();
+
+        return true;
     }
     
 }
