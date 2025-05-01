@@ -1,4 +1,5 @@
-﻿using apbd_cw7_s30522.Exceptions;
+﻿using System.Data.Common;
+using apbd_cw7_s30522.Exceptions;
 using apbd_cw7_s30522.Models;
 using apbd_cw7_s30522.Models.DTOs;
 using Microsoft.Data.SqlClient;
@@ -8,8 +9,9 @@ namespace apbd_cw7_s30522.Services;
 public interface IDbService
 {
     public Task<IEnumerable<TripCountriesGetDTO>> GetAllTripsWithCountriesAsync();
-    public Task<IEnumerable<ClientTripGetDTO>> GetClientTripsAsync(int id);
+    public Task<IEnumerable<ClientTripDetailsGetDTO>> GetClientTripsAsync(int id);
     public Task<Client> CreateClientAsync(ClientCreateDTO client);
+    public Task<ClientTripRegistrationDTO> RegisterClientToTripAsync(int idClient, int idTrip);
 }
 
 public class DbService(IConfiguration config) : IDbService
@@ -24,7 +26,7 @@ public class DbService(IConfiguration config) : IDbService
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         
-        string queryCountries = "SELECT IdCountry, Name FROM Country";
+        var queryCountries = "SELECT IdCountry, Name FROM Country";
         await using var commandCountries = new SqlCommand(queryCountries, connection);
         await using (var readerCountries = await commandCountries.ExecuteReaderAsync())
         {
@@ -40,7 +42,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
         
-        string queryTrips = "SELECT IdTrip, Name, Description, DateFrom, DateTo, MaxPeople FROM Trip";
+        var queryTrips = "SELECT IdTrip, Name, Description, DateFrom, DateTo, MaxPeople FROM Trip";
         await using var commandTrips = new SqlCommand(queryTrips, connection);
         await using (var readerTrips = await commandTrips.ExecuteReaderAsync())
         {
@@ -61,7 +63,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
         
-        string queryCountriesTrips = "SELECT IdCountry, IdTrip FROM Country_Trip";
+        var queryCountriesTrips = "SELECT IdCountry, IdTrip FROM Country_Trip";
         await using var commandCountriesTrips = new SqlCommand(queryCountriesTrips, connection);
         await using (var readerCountriesTrips = await commandCountriesTrips.ExecuteReaderAsync())
         {
@@ -78,14 +80,14 @@ public class DbService(IConfiguration config) : IDbService
         return tripsWithCountriesDict.Values;
     }
 
-    public async Task<IEnumerable<ClientTripGetDTO>> GetClientTripsAsync(int id)
+    public async Task<IEnumerable<ClientTripDetailsGetDTO>> GetClientTripsAsync(int id)
     {
-        var clientTripsDict = new Dictionary<int, List<ClientTripGetDTO>>();
+        var clientTripsDict = new Dictionary<int, List<ClientTripDetailsGetDTO>>();
         
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        string queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
+        var queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
         await using var commandClient = new SqlCommand(queryClient, connection);
         commandClient.Parameters.AddWithValue("@idClient", id);
         await using (var readerClient = await commandClient.ExecuteReaderAsync())
@@ -96,14 +98,14 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
 
-        string queryClientTrips = "SELECT IdTrip, RegisteredAt, PaymentDate FROM Client_Trip WHERE IdClient = @idClient";
+        var queryClientTrips = "SELECT IdTrip, RegisteredAt, PaymentDate FROM Client_Trip WHERE IdClient = @idClient";
         await using var commandClientTrips = new SqlCommand(queryClientTrips, connection);
         commandClientTrips.Parameters.AddWithValue("@idClient", id);
         await using (var readerClientTrips = await commandClientTrips.ExecuteReaderAsync())
         {
             while (await readerClientTrips.ReadAsync())
             {
-                var clientTrip = new ClientTripGetDTO
+                var clientTrip = new ClientTripDetailsGetDTO
                 {
                     IdTrip = readerClientTrips.GetInt32(0),
                     RegisteredAt = readerClientTrips.GetInt32(1),
@@ -112,7 +114,7 @@ public class DbService(IConfiguration config) : IDbService
 
                 if (!clientTripsDict.ContainsKey(clientTrip.IdTrip))
                 {
-                    clientTripsDict.Add(clientTrip.IdTrip, new List<ClientTripGetDTO>());
+                    clientTripsDict.Add(clientTrip.IdTrip, new List<ClientTripDetailsGetDTO>());
                 }
 
                 clientTripsDict[clientTrip.IdTrip].Add(clientTrip);
@@ -126,7 +128,7 @@ public class DbService(IConfiguration config) : IDbService
 
         foreach (var idTrip in clientTripsDict.Keys)
         {
-            string queryTrip = "SELECT Name, Description, DateFrom, DateTo, MaxPeople FROM Trip WHERE IdTrip = @idTrip";
+            var queryTrip = "SELECT Name, Description, DateFrom, DateTo, MaxPeople FROM Trip WHERE IdTrip = @idTrip";
             await using var commandTrip = new SqlCommand(queryTrip, connection);
             commandTrip.Parameters.AddWithValue("@idTrip", idTrip);
             await using (var readerTrip = await commandTrip.ExecuteReaderAsync())
@@ -152,7 +154,7 @@ public class DbService(IConfiguration config) : IDbService
     {
         await using var connection = new SqlConnection(_connectionString);
         
-        string insert = "INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel) " +
+        var insert = "INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel) " +
                         "VALUES (@firstName, @lastName, @email, @telephone, @pesel) " +
                         "; Select scope_identity()";
         await using var command = new SqlCommand(insert, connection);
@@ -174,6 +176,78 @@ public class DbService(IConfiguration config) : IDbService
             Telephone = client.Telephone,
             Pesel = client.Pesel
         };
+    }
+
+    public async Task<ClientTripRegistrationDTO> RegisterClientToTripAsync(int idClient, int idTrip)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        var queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
+        await using var commandClient = new SqlCommand(queryClient, connection);
+        commandClient.Parameters.AddWithValue("@idClient", idClient);
+        await using (var readerClient = await commandClient.ExecuteReaderAsync())
+        {
+            if (!await readerClient.ReadAsync())
+            {
+                throw new NotFoundException($"Client of id {idClient} does not exist");
+            }
+        }
+
+        var tripMaxPeople = 0;
+        var queryTrip = "SELECT MaxPeople FROM Trip WHERE IdTrip = @idTrip";
+        await using var commandTrip = new SqlCommand(queryTrip, connection);
+        commandTrip.Parameters.AddWithValue("@idTrip", idTrip);
+        await using (var readerTrip = await commandTrip.ExecuteReaderAsync())
+        {
+            if (!await readerTrip.ReadAsync())
+            {
+                throw new NotFoundException($"Trip of id {idTrip} does not exist");
+            }
+
+            tripMaxPeople = readerTrip.GetInt32(0);
+        }
+        
+        var queryExists = "SELECT * FROM Client_Trip WHERE IdTrip = @idTrip AND IdClient = @IdClient";
+        await using var commandExists = new SqlCommand(queryExists, connection);
+        commandExists.Parameters.AddWithValue("@idTrip", idTrip);
+        commandExists.Parameters.AddWithValue("@idClient", idClient);
+        await using (var readerExists = await commandExists.ExecuteReaderAsync())
+        {
+            if (await readerExists.ReadAsync())
+            {
+                throw new ConflictException($"Client of id {idClient} already booked trip of id {idTrip}");
+            }
+        }
+        
+        var queryCountPeople = "SELECT COUNT(*) FROM Client_Trip WHERE IdTrip = @idTrip";
+        await using var commandCountPeople = new SqlCommand(queryCountPeople, connection);
+        commandCountPeople.Parameters.AddWithValue("@IdTrip", idTrip);
+        var tripPeopleRegistered = (int) (await commandCountPeople.ExecuteScalarAsync() ?? 0);
+
+        if (tripPeopleRegistered >= tripMaxPeople)
+        {
+            throw new ConflictException($"Trip of id {idTrip} is fully booked");
+        }
+        
+        var clientTripRegistration = new ClientTripRegistrationDTO
+        {
+            IdClient = idClient,
+            IdTrip = idTrip,
+            RegisteredAt = int.Parse(DateTime.Now.ToString("yyyyMMdd")),
+            PaymentDate = null
+        };
+
+        var insertRegistration = "INSERT INTO Client_Trip (IdClient, IdTrip, RegisteredAt, PaymentDate) " +
+                                 "VALUES (@idClient, @idTrip, @registeredAt, @paymentDate)";
+        await using var commandRegistration = new SqlCommand(insertRegistration, connection);
+        commandRegistration.Parameters.AddWithValue("@idClient", clientTripRegistration.IdClient);
+        commandRegistration.Parameters.AddWithValue("@idTrip", clientTripRegistration.IdTrip);
+        commandRegistration.Parameters.AddWithValue("@registeredAt", clientTripRegistration.RegisteredAt);
+        commandRegistration.Parameters.AddWithValue("@paymentDate", (object?) clientTripRegistration.PaymentDate ?? DBNull.Value);
+        await commandRegistration.ExecuteScalarAsync();
+        
+        return clientTripRegistration;
     }
     
 }

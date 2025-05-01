@@ -30,5 +30,21 @@ public class ClientsController(IDbService dbService) : ControllerBase
         return Created($"/api/clients/{client.IdClient}", client.IdClient);
     }
 
+    [HttpPut("{id}/trips/{tripId}")]
+    public async Task<IActionResult> RegisterClientToTripAsync([FromRoute] int id, [FromRoute] int tripId)
+    {
+        try
+        {
+            return Ok(await dbService.RegisterClientToTripAsync(id, tripId));
+        }
+        catch (NotFoundException eNotFound)
+        {
+            return NotFound(eNotFound.Message);
+        }
+        catch (ConflictException eConflict)
+        {
+            return Conflict(eConflict.Message);
+        }
+    }
 
 }
