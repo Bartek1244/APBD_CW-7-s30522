@@ -27,6 +27,7 @@ public class DbService(IConfiguration config) : IDbService
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
         
+        //Load all countries so later on i can map them to the trips
         var queryCountries = "SELECT IdCountry, Name FROM Country";
         await using var commandCountries = new SqlCommand(queryCountries, connection);
         await using (var readerCountries = await commandCountries.ExecuteReaderAsync())
@@ -43,6 +44,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
         
+        //load all trips
         var queryTrips = "SELECT IdTrip, Name, Description, DateFrom, DateTo, MaxPeople FROM Trip";
         await using var commandTrips = new SqlCommand(queryTrips, connection);
         await using (var readerTrips = await commandTrips.ExecuteReaderAsync())
@@ -64,6 +66,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
         
+        //map countries to the trips from associate table
         var queryCountriesTrips = "SELECT IdCountry, IdTrip FROM Country_Trip";
         await using var commandCountriesTrips = new SqlCommand(queryCountriesTrips, connection);
         await using (var readerCountriesTrips = await commandCountriesTrips.ExecuteReaderAsync())
@@ -88,6 +91,7 @@ public class DbService(IConfiguration config) : IDbService
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
+        //checking if client of route id exists
         var queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
         await using var commandClient = new SqlCommand(queryClient, connection);
         commandClient.Parameters.AddWithValue("@idClient", id);
@@ -99,6 +103,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
 
+        //load registration details of client of id from route
         var queryClientTrips = "SELECT IdTrip, RegisteredAt, PaymentDate FROM Client_Trip WHERE IdClient = @idClient";
         await using var commandClientTrips = new SqlCommand(queryClientTrips, connection);
         commandClientTrips.Parameters.AddWithValue("@idClient", id);
@@ -129,6 +134,7 @@ public class DbService(IConfiguration config) : IDbService
 
         foreach (var idTrip in clientTripsDict.Keys)
         {
+            //load details of trips that client is registered for
             var queryTrip = "SELECT Name, Description, DateFrom, DateTo, MaxPeople FROM Trip WHERE IdTrip = @idTrip";
             await using var commandTrip = new SqlCommand(queryTrip, connection);
             commandTrip.Parameters.AddWithValue("@idTrip", idTrip);
@@ -155,6 +161,7 @@ public class DbService(IConfiguration config) : IDbService
     {
         await using var connection = new SqlConnection(_connectionString);
         
+        //just insert new client
         var insert = "INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel) " +
                         "VALUES (@firstName, @lastName, @email, @telephone, @pesel) " +
                         "; Select scope_identity()";
@@ -184,6 +191,7 @@ public class DbService(IConfiguration config) : IDbService
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
+        //check if client of id from route exists
         var queryClient = "SELECT * FROM Client WHERE IdClient = @idClient";
         await using var commandClient = new SqlCommand(queryClient, connection);
         commandClient.Parameters.AddWithValue("@idClient", idClient);
@@ -195,6 +203,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
 
+        //check if trip of id from route exists and load max people for trip
         var tripMaxPeople = 0;
         var queryTrip = "SELECT MaxPeople FROM Trip WHERE IdTrip = @idTrip";
         await using var commandTrip = new SqlCommand(queryTrip, connection);
@@ -209,6 +218,7 @@ public class DbService(IConfiguration config) : IDbService
             tripMaxPeople = readerTrip.GetInt32(0);
         }
         
+        //check if client is not already registered for trip (key conflict)
         var queryExists = "SELECT * FROM Client_Trip WHERE IdTrip = @idTrip AND IdClient = @IdClient";
         await using var commandExists = new SqlCommand(queryExists, connection);
         commandExists.Parameters.AddWithValue("@idTrip", idTrip);
@@ -221,6 +231,7 @@ public class DbService(IConfiguration config) : IDbService
             }
         }
         
+        //count people that already registered for the trip so can check if did not passed maxPeople
         var queryCountPeople = "SELECT COUNT(*) FROM Client_Trip WHERE IdTrip = @idTrip";
         await using var commandCountPeople = new SqlCommand(queryCountPeople, connection);
         commandCountPeople.Parameters.AddWithValue("@IdTrip", idTrip);
@@ -239,6 +250,7 @@ public class DbService(IConfiguration config) : IDbService
             PaymentDate = null
         };
 
+        //insert new client trip registration
         var insertRegistration = "INSERT INTO Client_Trip (IdClient, IdTrip, RegisteredAt, PaymentDate) " +
                                  "VALUES (@idClient, @idTrip, @registeredAt, @paymentDate)";
         await using var commandRegistration = new SqlCommand(insertRegistration, connection);
@@ -256,6 +268,7 @@ public class DbService(IConfiguration config) : IDbService
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
+        //check if there is registration for client, trip from ids from route
         var queryExists = "SELECT * FROM Client_Trip WHERE IdClient = @idClient AND IdTrip = @idTrip";
         await using var commandExists = new SqlCommand(queryExists, connection);
         commandExists.Parameters.AddWithValue("@idClient", idClient);
@@ -268,7 +281,8 @@ public class DbService(IConfiguration config) : IDbService
                     $"Client of id {idClient} does not have reservation on trip of id {idTrip}");
             }
         }
-
+        
+        //delete registration
         var delete = "DELETE FROM Client_Trip WHERE IdClient = @idClient AND IdTrip = @idTrip";
         await using var commandDelete = new SqlCommand(delete, connection);
         commandDelete.Parameters.AddWithValue("@idClient", idClient);

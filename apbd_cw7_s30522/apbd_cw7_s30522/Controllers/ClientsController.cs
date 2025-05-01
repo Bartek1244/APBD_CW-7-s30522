@@ -10,6 +10,7 @@ namespace apbd_cw7_s30522.Controllers;
 public class ClientsController(IDbService dbService) : ControllerBase
 {
 
+    //Ten endpoint będzie pobierał wszystkie wycieczki powiązane z konkretnym klientem.
     [HttpGet("{id}/trips")]
     public async Task<IActionResult> GetClientWithTripsAsync([FromRoute] int id)
     {
@@ -23,6 +24,7 @@ public class ClientsController(IDbService dbService) : ControllerBase
         }
     }
 
+    //Ten endpoint utworzy nowy rekord klienta.
     [HttpPost]
     public async Task<IActionResult> CreateClientAsync([FromBody] ClientCreateDTO body)
     {
@@ -30,6 +32,7 @@ public class ClientsController(IDbService dbService) : ControllerBase
         return Created($"/api/clients/{client.IdClient}", client.IdClient);
     }
 
+    //Ten endpoint zarejestruje klienta na konkretną wycieczkę.
     [HttpPut("{id}/trips/{tripId}")]
     public async Task<IActionResult> RegisterClientToTripAsync([FromRoute] int id, [FromRoute] int tripId)
     {
@@ -47,6 +50,7 @@ public class ClientsController(IDbService dbService) : ControllerBase
         }
     }
 
+    //Ten endpoint usunie rejestrację klienta z wycieczki.
     [HttpDelete("{id}/trips/{tripId}")]
     public async Task<IActionResult> DeleteClientTripRegistrationAsync([FromRoute] int id, [FromRoute] int tripId)
     {
